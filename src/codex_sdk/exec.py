@@ -3,11 +3,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-import platform
 import shutil
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 from typing import AsyncIterator
 
 from .options import ApprovalMode, ModelReasoningEffort, SandboxMode
@@ -191,32 +188,6 @@ def _find_codex_path() -> str:
     installed = shutil.which("codex")
     if installed:
         return installed
-
-    platform_name = sys.platform
-    arch = platform.machine().lower()
-
-    target_triple: str | None = None
-    if platform_name.startswith("linux"):
-        if arch in ("x86_64", "amd64"):
-            target_triple = "x86_64-unknown-linux-musl"
-        elif arch in ("aarch64", "arm64"):
-            target_triple = "aarch64-unknown-linux-musl"
-    elif platform_name == "darwin":
-        if arch in ("x86_64", "amd64"):
-            target_triple = "x86_64-apple-darwin"
-        elif arch in ("aarch64", "arm64"):
-            target_triple = "aarch64-apple-darwin"
-    elif platform_name in ("win32", "cygwin"):
-        if arch in ("x86_64", "amd64"):
-            target_triple = "x86_64-pc-windows-msvc"
-        elif arch in ("aarch64", "arm64"):
-            target_triple = "aarch64-pc-windows-msvc"
-
-    if target_triple is None:
-        raise RuntimeError(f"Unsupported platform: {platform_name} ({arch})")
-
-    script_dir = Path(__file__).resolve().parent
-    vendor_root = script_dir / "vendor"
-    arch_root = vendor_root / target_triple
-    codex_binary = "codex.exe" if platform_name.startswith("win") else "codex"
-    return str(arch_root / "codex" / codex_binary)
+    raise RuntimeError(
+        "Could not find `codex` on PATH; set codex_path_override to override."
+    )
