@@ -3,6 +3,7 @@ name = "codex-sdk"
 version = "0.1.0"
 description = "Python SDK for the Codex CLI"
 readme = "README.md"
+license = { file = "LICENSE" }
 authors = [
     { name = "hongzio", email = "11085613+hongzio@users.noreply.github.com" }
 ]
