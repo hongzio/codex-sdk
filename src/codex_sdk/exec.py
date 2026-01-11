@@ -37,7 +37,9 @@ class CodexExecArgs:
 
 
 class CodexExec:
-    def __init__(self, executable_path: str | None = None, env: dict[str, str] | None = None) -> None:
+    def __init__(
+        self, executable_path: str | None = None, env: dict[str, str] | None = None
+    ) -> None:
         self._executable_path = executable_path or _find_codex_path()
         self._env_override = env
 
@@ -63,14 +65,19 @@ class CodexExec:
             )
         if args.network_access_enabled is not None:
             command_args.extend(
-                ["--config", f"sandbox_workspace_write.network_access={args.network_access_enabled}"]
+                [
+                    "--config",
+                    f"sandbox_workspace_write.network_access={args.network_access_enabled}",
+                ]
             )
         if args.web_search_enabled is not None:
             command_args.extend(
                 ["--config", f"features.web_search_request={args.web_search_enabled}"]
             )
         if args.approval_policy:
-            command_args.extend(["--config", f'approval_policy="{args.approval_policy}"'])
+            command_args.extend(
+                ["--config", f'approval_policy="{args.approval_policy}"']
+            )
         if args.images:
             for image in args.images:
                 command_args.extend(["--image", image])
@@ -110,9 +117,7 @@ class CodexExec:
 
             if returncode != 0:
                 detail = (
-                    f"signal {-returncode}"
-                    if returncode < 0
-                    else f"code {returncode}"
+                    f"signal {-returncode}" if returncode < 0 else f"code {returncode}"
                 )
                 raise RuntimeError(
                     f"Codex Exec exited with {detail}: {stderr_bytes.decode('utf-8', 'replace')}"
@@ -132,7 +137,9 @@ class CodexExec:
         if self._env_override is not None:
             env.update(self._env_override)
         else:
-            env.update({key: value for key, value in os.environ.items() if value is not None})
+            env.update(
+                {key: value for key, value in os.environ.items() if value is not None}
+            )
 
         if INTERNAL_ORIGINATOR_ENV not in env:
             env[INTERNAL_ORIGINATOR_ENV] = PYTHON_SDK_ORIGINATOR

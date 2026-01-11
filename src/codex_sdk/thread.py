@@ -3,9 +3,17 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Literal, TypedDict, Union, cast
+from typing import Any, AsyncIterator, Literal, TypedDict, TypeGuard, Union
 
-from .events import ThreadEvent, ThreadError, Usage
+from .events import (
+    ItemCompletedEvent,
+    ThreadEvent,
+    ThreadError,
+    ThreadStartedEvent,
+    TurnCompletedEvent,
+    TurnFailedEvent,
+    Usage,
+)
 from .exec import CodexExec, CodexExecArgs
 from .items import ThreadItem
 from .options import CodexOptions, ThreadOptions, TurnOptions
@@ -72,7 +80,9 @@ class Thread:
         return StreamedTurn(
             events=self._run_streamed_internal(
                 input_,
-                _normalize_turn_options(turn_options, output_schema=output_schema, signal=signal),
+                _normalize_turn_options(
+                    turn_options, output_schema=output_schema, signal=signal
+                ),
             )
         )
 
@@ -108,8 +118,8 @@ class Thread:
                     parsed = json.loads(item)
                 except json.JSONDecodeError as error:
                     raise RuntimeError(f"Failed to parse item: {item}") from error
-                event = cast(ThreadEvent, parsed)
-                if event["type"] == "thread.started":
+                event: ThreadEvent = parsed
+                if _is_thread_started(event):
                     self._id = event["thread_id"]
                 yield event
         finally:
@@ -124,7 +134,10 @@ class Thread:
         signal: asyncio.Event | None = None,
     ) -> Turn:
         generator = self._run_streamed_internal(
-            input_, _normalize_turn_options(turn_options, output_schema=output_schema, signal=signal)
+            input_,
+            _normalize_turn_options(
+                turn_options, output_schema=output_schema, signal=signal
+            ),
         )
         items: list[ThreadItem] = []
         final_response = ""
@@ -132,15 +145,14 @@ class Thread:
         turn_failure: ThreadError | None = None
 
         async for event in generator:
-            event_type = event["type"]
-            if event_type == "item.completed":
+            if _is_item_completed(event):
                 item = event["item"]
                 if item["type"] == "agent_message":
                     final_response = item["text"]
                 items.append(item)
-            elif event_type == "turn.completed":
+            elif _is_turn_completed(event):
                 usage = event["usage"]
-            elif event_type == "turn.failed":
+            elif _is_turn_failed(event):
                 turn_failure = event["error"]
                 break
 
@@ -174,3 +186,19 @@ def _normalize_turn_options(
             raise ValueError("Pass either TurnOptions or keyword arguments, not both")
         return turn_options
     return TurnOptions(output_schema=output_schema, signal=signal)
+
+
+def _is_thread_started(event: ThreadEvent) -> TypeGuard[ThreadStartedEvent]:
+    return event["type"] == "thread.started"
+
+
+def _is_item_completed(event: ThreadEvent) -> TypeGuard[ItemCompletedEvent]:
+    return event["type"] == "item.completed"
+
+
+def _is_turn_completed(event: ThreadEvent) -> TypeGuard[TurnCompletedEvent]:
+    return event["type"] == "turn.completed"
+
+
+def _is_turn_failed(event: ThreadEvent) -> TypeGuard[TurnFailedEvent]:
+    return event["type"] == "turn.failed"

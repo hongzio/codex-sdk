@@ -16,6 +16,7 @@ class OutputSchemaFile:
 
 async def create_output_schema_file(schema: Any | None) -> OutputSchemaFile:
     if schema is None:
+
         async def _noop() -> None:
             return None
 
