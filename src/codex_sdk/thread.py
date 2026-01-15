@@ -107,6 +107,7 @@ class Thread:
                 model_reasoning_effort=options.model_reasoning_effort,
                 signal=turn_options.signal,
                 network_access_enabled=options.network_access_enabled,
+                web_search_mode=options.web_search_mode,
                 web_search_enabled=options.web_search_enabled,
                 approval_policy=options.approval_policy,
                 additional_directories=options.additional_directories,

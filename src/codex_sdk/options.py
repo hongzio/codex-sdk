@@ -7,6 +7,7 @@ from typing import Any, Literal
 ApprovalMode = Literal["never", "on-request", "on-failure", "untrusted"]
 SandboxMode = Literal["read-only", "workspace-write", "danger-full-access"]
 ModelReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
+WebSearchMode = Literal["disabled", "cached", "live"]
 
 
 @dataclass(slots=True)
@@ -25,6 +26,7 @@ class ThreadOptions:
     skip_git_repo_check: bool | None = None
     model_reasoning_effort: ModelReasoningEffort | None = None
     network_access_enabled: bool | None = None
+    web_search_mode: WebSearchMode | None = None
     web_search_enabled: bool | None = None
     approval_policy: ApprovalMode | None = None
     additional_directories: list[str] | None = None

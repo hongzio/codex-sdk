@@ -43,6 +43,7 @@ class ThreadOptionTests(unittest.IsolatedAsyncioTestCase):
             skip_git_repo_check=True,
             model_reasoning_effort="high",
             network_access_enabled=True,
+            web_search_mode="cached",
             web_search_enabled=False,
             approval_policy="on-request",
             additional_directories=["/tmp/a", "/tmp/b"],
@@ -58,6 +59,7 @@ class ThreadOptionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(args.skip_git_repo_check)
         self.assertEqual(args.model_reasoning_effort, "high")
         self.assertTrue(args.network_access_enabled)
+        self.assertEqual(args.web_search_mode, "cached")
         self.assertFalse(args.web_search_enabled)
         self.assertEqual(args.approval_policy, "on-request")
         self.assertEqual(args.additional_directories, ["/tmp/a", "/tmp/b"])

@@ -9,6 +9,7 @@ from .options import (
     ModelReasoningEffort,
     SandboxMode,
     ThreadOptions,
+    WebSearchMode,
 )
 from .thread import Thread
 
@@ -20,6 +21,7 @@ class ThreadOptionsKwargs(TypedDict, total=False):
     skip_git_repo_check: NotRequired[bool | None]
     model_reasoning_effort: NotRequired[ModelReasoningEffort | None]
     network_access_enabled: NotRequired[bool | None]
+    web_search_mode: NotRequired[WebSearchMode | None]
     web_search_enabled: NotRequired[bool | None]
     approval_policy: NotRequired[ApprovalMode | None]
     additional_directories: NotRequired[list[str] | None]

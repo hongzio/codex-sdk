@@ -31,6 +31,7 @@ from .options import (
     ApprovalMode,
     SandboxMode,
     ModelReasoningEffort,
+    WebSearchMode,
 )
 
 __all__ = [
@@ -46,6 +47,7 @@ __all__ = [
     "ApprovalMode",
     "SandboxMode",
     "ModelReasoningEffort",
+    "WebSearchMode",
     "ThreadEvent",
     "ThreadStartedEvent",
     "TurnStartedEvent",

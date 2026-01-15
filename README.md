@@ -115,6 +115,16 @@ thread.
 thread = codex.start_thread(working_directory="/path/to/project", skip_git_repo_check=True)
 ```
 
+### Web search controls
+
+Configure web search behavior per thread by passing `web_search_mode`.
+
+```python
+thread = codex.start_thread(web_search_mode="cached")  # or "live" / "disabled"
+```
+
+The legacy `web_search_enabled` flag maps to `web_search_mode="live"` for `True` and `"disabled"` for `False`.
+
 ### Controlling the Codex CLI environment
 
 By default, the Codex CLI inherits the Python process environment. Provide the optional `env` parameter when

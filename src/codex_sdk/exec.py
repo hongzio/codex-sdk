@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass
 from typing import AsyncIterator
 
-from .options import ApprovalMode, ModelReasoningEffort, SandboxMode
+from .options import ApprovalMode, ModelReasoningEffort, SandboxMode, WebSearchMode
 
 INTERNAL_ORIGINATOR_ENV = "CODEX_INTERNAL_ORIGINATOR_OVERRIDE"
 PYTHON_SDK_ORIGINATOR = "codex_sdk_py"
@@ -29,6 +29,7 @@ class CodexExecArgs:
     model_reasoning_effort: ModelReasoningEffort | None = None
     signal: asyncio.Event | None = None
     network_access_enabled: bool | None = None
+    web_search_mode: WebSearchMode | None = None
     web_search_enabled: bool | None = None
     approval_policy: ApprovalMode | None = None
 
@@ -67,10 +68,12 @@ class CodexExec:
                     f"sandbox_workspace_write.network_access={args.network_access_enabled}",
                 ]
             )
-        if args.web_search_enabled is not None:
-            command_args.extend(
-                ["--config", f"features.web_search_request={args.web_search_enabled}"]
-            )
+        if args.web_search_mode:
+            command_args.extend(["--config", f'web_search="{args.web_search_mode}"'])
+        elif args.web_search_enabled is True:
+            command_args.extend(["--config", 'web_search="live"'])
+        elif args.web_search_enabled is False:
+            command_args.extend(["--config", 'web_search="disabled"'])
         if args.approval_policy:
             command_args.extend(
                 ["--config", f'approval_policy="{args.approval_policy}"']
