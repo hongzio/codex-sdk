@@ -36,3 +36,4 @@ class ThreadOptions:
 class TurnOptions:
     output_schema: Any | None = None
     signal: asyncio.Event | None = None
+    stdout_idle_timeout_seconds: float | None = 60.0

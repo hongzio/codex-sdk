@@ -60,6 +60,18 @@ async for event in stream.events:
         print("usage", event["usage"])
 ```
 
+By default the SDK raises if the Codex CLI produces no stdout for 60 seconds. When streaming, the idle timeout is
+surfaced as a `turn.failed` event. Override the timeout per turn:
+
+```python
+stream = await thread.run_streamed(
+    "Diagnose the test failure and propose a fix",
+    stdout_idle_timeout_seconds=120,
+)
+```
+
+To disable the idle timeout, pass `TurnOptions(stdout_idle_timeout_seconds=None)`.
+
 ### Structured output
 
 The Codex agent can produce a JSON response that conforms to a specified schema. The schema can be provided for each turn

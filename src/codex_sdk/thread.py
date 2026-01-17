@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Literal, TypedDict, TypeGuard, Union
 
@@ -14,10 +15,12 @@ from .events import (
     TurnFailedEvent,
     Usage,
 )
-from .exec import CodexExec, CodexExecArgs
+from .exec import CodexExec, CodexExecArgs, CodexExecIdleTimeoutError
 from .items import ThreadItem
 from .options import CodexOptions, ThreadOptions, TurnOptions
 from .output_schema_file import create_output_schema_file
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -76,12 +79,16 @@ class Thread:
         *,
         output_schema: Any | None = None,
         signal: asyncio.Event | None = None,
+        stdout_idle_timeout_seconds: float | None = None,
     ) -> StreamedTurn:
         return StreamedTurn(
             events=self._run_streamed_internal(
                 input_,
                 _normalize_turn_options(
-                    turn_options, output_schema=output_schema, signal=signal
+                    turn_options,
+                    output_schema=output_schema,
+                    signal=signal,
+                    stdout_idle_timeout_seconds=stdout_idle_timeout_seconds,
                 ),
             )
         )
@@ -111,6 +118,7 @@ class Thread:
                 web_search_enabled=options.web_search_enabled,
                 approval_policy=options.approval_policy,
                 additional_directories=options.additional_directories,
+                stdout_idle_timeout_seconds=turn_options.stdout_idle_timeout_seconds,
             )
         )
         try:
@@ -120,9 +128,19 @@ class Thread:
                 except json.JSONDecodeError as error:
                     raise RuntimeError(f"Failed to parse item: {item}") from error
                 event: ThreadEvent = parsed
+                logger.debug(
+                    "codex event: type=%s bytes=%d",
+                    event.get("type"),
+                    len(item),
+                )
                 if _is_thread_started(event):
                     self._id = event["thread_id"]
                 yield event
+        except CodexExecIdleTimeoutError as error:
+            yield TurnFailedEvent(
+                type="turn.failed",
+                error=ThreadError(message=str(error)),
+            )
         finally:
             await schema_file.cleanup()
 
@@ -133,11 +151,15 @@ class Thread:
         *,
         output_schema: Any | None = None,
         signal: asyncio.Event | None = None,
+        stdout_idle_timeout_seconds: float | None = None,
     ) -> Turn:
         generator = self._run_streamed_internal(
             input_,
             _normalize_turn_options(
-                turn_options, output_schema=output_schema, signal=signal
+                turn_options,
+                output_schema=output_schema,
+                signal=signal,
+                stdout_idle_timeout_seconds=stdout_idle_timeout_seconds,
             ),
         )
         items: list[ThreadItem] = []
@@ -181,12 +203,23 @@ def _normalize_turn_options(
     *,
     output_schema: Any | None,
     signal: asyncio.Event | None,
+    stdout_idle_timeout_seconds: float | None,
 ) -> TurnOptions:
     if turn_options is not None:
-        if output_schema is not None or signal is not None:
+        if (
+            output_schema is not None
+            or signal is not None
+            or stdout_idle_timeout_seconds is not None
+        ):
             raise ValueError("Pass either TurnOptions or keyword arguments, not both")
         return turn_options
-    return TurnOptions(output_schema=output_schema, signal=signal)
+    if stdout_idle_timeout_seconds is None:
+        return TurnOptions(output_schema=output_schema, signal=signal)
+    return TurnOptions(
+        output_schema=output_schema,
+        signal=signal,
+        stdout_idle_timeout_seconds=stdout_idle_timeout_seconds,
+    )
 
 
 def _is_thread_started(event: ThreadEvent) -> TypeGuard[ThreadStartedEvent]:

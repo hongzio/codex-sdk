@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import os
 import shutil
 from dataclasses import dataclass
@@ -11,6 +12,16 @@ from .options import ApprovalMode, ModelReasoningEffort, SandboxMode, WebSearchM
 
 INTERNAL_ORIGINATOR_ENV = "CODEX_INTERNAL_ORIGINATOR_OVERRIDE"
 PYTHON_SDK_ORIGINATOR = "codex_sdk_py"
+STREAM_READER_LIMIT = 10 * 1024 * 1024
+STREAM_READ_CHUNK_SIZE = 64 * 1024
+
+logger = logging.getLogger(__name__)
+
+
+class CodexExecIdleTimeoutError(RuntimeError):
+    def __init__(self, timeout_seconds: float) -> None:
+        super().__init__(f"Codex exec stdout idle for {timeout_seconds}s")
+        self.timeout_seconds = timeout_seconds
 
 
 @dataclass(slots=True)
@@ -32,6 +43,7 @@ class CodexExecArgs:
     web_search_mode: WebSearchMode | None = None
     web_search_enabled: bool | None = None
     approval_policy: ApprovalMode | None = None
+    stdout_idle_timeout_seconds: float | None = None
 
 
 class CodexExec:
@@ -93,6 +105,7 @@ class CodexExec:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            limit=STREAM_READER_LIMIT,
         )
 
         stderr_task: asyncio.Task[bytes] | None = None
@@ -107,7 +120,11 @@ class CodexExec:
             if process.stderr is not None:
                 stderr_task = asyncio.create_task(_read_stream(process.stderr))
 
-            async for line in _iter_lines(process.stdout, args.signal):
+            async for line in _iter_lines(
+                process.stdout,
+                args.signal,
+                stdout_idle_timeout_seconds=args.stdout_idle_timeout_seconds,
+            ):
                 yield line
 
             returncode = await process.wait()
@@ -161,30 +178,84 @@ async def _read_stream(stream: asyncio.StreamReader) -> bytes:
 
 
 async def _iter_lines(
-    stream: asyncio.StreamReader, signal: asyncio.Event | None
+    stream: asyncio.StreamReader,
+    signal: asyncio.Event | None,
+    *,
+    stdout_idle_timeout_seconds: float | None,
 ) -> AsyncIterator[str]:
+    buffer = b""
     while True:
-        if signal is None:
-            line = await stream.readline()
-        else:
-            line_task = asyncio.create_task(stream.readline())
-            signal_task = asyncio.create_task(signal.wait())
-            done, pending = await asyncio.wait(
-                [line_task, signal_task], return_when=asyncio.FIRST_COMPLETED
-            )
-            if signal_task in done:
-                line_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await line_task
-                raise asyncio.CancelledError("Codex exec cancelled")
-            signal_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await signal_task
-            line = line_task.result()
-
-        if not line:
+        try:
+            logger.debug("codex stdout: waiting for chunk (buffer=%d)", len(buffer))
+            if signal is None:
+                if stdout_idle_timeout_seconds is None:
+                    chunk = await stream.read(STREAM_READ_CHUNK_SIZE)
+                else:
+                    try:
+                        chunk = await asyncio.wait_for(
+                            stream.read(STREAM_READ_CHUNK_SIZE),
+                            timeout=stdout_idle_timeout_seconds,
+                        )
+                    except asyncio.TimeoutError as exc:
+                        raise CodexExecIdleTimeoutError(
+                            stdout_idle_timeout_seconds
+                        ) from exc
+            else:
+                read_task = asyncio.create_task(stream.read(STREAM_READ_CHUNK_SIZE))
+                signal_task = asyncio.create_task(signal.wait())
+                if stdout_idle_timeout_seconds is None:
+                    done, pending = await asyncio.wait(
+                        [read_task, signal_task],
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                else:
+                    done, pending = await asyncio.wait(
+                        [read_task, signal_task],
+                        timeout=stdout_idle_timeout_seconds,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                if signal_task in done:
+                    read_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await read_task
+                    raise asyncio.CancelledError("Codex exec cancelled")
+                if read_task in done:
+                    signal_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await signal_task
+                    chunk = read_task.result()
+                else:
+                    read_task.cancel()
+                    signal_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await read_task
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await signal_task
+                    if stdout_idle_timeout_seconds is None:
+                        raise RuntimeError(
+                            "Codex exec stdout idle timeout triggered without timeout"
+                        )
+                    raise CodexExecIdleTimeoutError(stdout_idle_timeout_seconds)
+            logger.debug("codex stdout: received chunk (bytes=%d)", len(chunk))
+        except asyncio.CancelledError:
+            raise
+        except CodexExecIdleTimeoutError:
+            raise
+        except Exception as exc:
+            logger.warning("Error reading from codex stdout: %s", exc)
+            if buffer:
+                yield buffer.decode("utf-8", "replace").rstrip("\r")
             break
-        yield line.decode("utf-8", "replace").rstrip("\r\n")
+
+        if not chunk:
+            if buffer:
+                yield buffer.decode("utf-8", "replace").rstrip("\r")
+            break
+        buffer += chunk
+        while b"\n" in buffer:
+            line, buffer = buffer.split(b"\n", 1)
+            logger.debug("codex stdout: yielded line (bytes=%d)", len(line))
+            yield line.decode("utf-8", "replace").rstrip("\r")
 
 
 def _find_codex_path() -> str:
